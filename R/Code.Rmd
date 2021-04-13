@@ -1,0 +1,390 @@
+
+Note: Due to confidentiality some modifications have been done to the data.
+Areas with less than 10 observed cases have been modificated.
+
+## Read the data
+
+```{r}
+Data=read.table(file="DataExample.txt")
+```
+
+## Read the R-INLA package
+
+```{r}
+library(INLA)
+```
+
+## Description of indexes created to fit the final model
+
+1)  i_P: take the value of 1 if the observation corresponds to lung cancer and 0 if the observation corresponds to LOCP cancer.
+
+2)  i_LOCP: take the value of 1 if the observation corresponds to LOCP cancer and 0 if the observation corresponds to lung cancer.
+
+3)  i: a region index. Takes values 1 to 94. Note the model="besag2" defines a model with length $N=2n$ where $n$ is the size of the graph. In this case $2*47$.
+
+4)  LOCP_het: take the value of the Region number (1 to 47) if the observation corresponds to LOCP cancer and NA if the observation corresponds to lung cancer.
+
+## Read the graph using a neighbourhood matrix
+
+```{r}
+g <- inla.read.graph("esp_prov_nb.inla")
+```
+
+The .inla file contains the following:
+
+47\
+1 5 8 19 25 30 45\
+2 7 3 12 15 17 22 29 43\
+3 3 2 29 43\
+4 2 17 29\
+$\vdots$\
+42 6 5 6 9 12 15 27\
+43 5 2 3 11 15 41\
+44 7 5 8 23 33 35 37 46\
+45 4 1 8 19 36\
+46 4 23 31 35 44\
+47 8 18 21 24 25 30 39 40 41\
+
+The first line summarized the total number of regions, i.e. 47.
+
+The second line indicates that the province 1 has 5 neighbours that are provinces 8, 19, 25, 30, 45.
+
+The third line indicates that the province 2 has 7 neighbours that are provinces 3, 12, 15, 17, 22, 29, 43.
+
+And so on.
+
+## PC-priors definition
+
+```{r}
+pcprec <- list(theta=list(prior='pc.prec', param=c(1,0.01)))
+```
+
+## Formula for the final model and INLA execution
+
+```{r}
+formula = Cases~ -1+i_P + i_LOCP + f(i, model="besag2", graph=g,hyper=pcprec, replicate=Gender)   +
+  f(LOCP_het, model="iid",hyper=pcprec,constr =T) +
+  f(Age_group, model="iid",hyper=pcprec,constr =T,replicate=Gender)
+
+```
+
+```{r}
+result = inla(formula, family = "poisson",
+              data = data.frame(Data), E=Population,
+              control.compute=list(dic=TRUE, cpo=TRUE, waic=TRUE, hyperpar=TRUE),
+              control.inla=list(strategy="simplified.laplace",verbose = F, numint.maxfeval= 100000))
+```
+
+## Selection criteria values for the model
+
+### DIC
+
+```{r}
+result$dic$dic    
+```
+
+### WAIC
+
+```{r}
+result$waic$waic
+```
+
+### LS
+
+```{r}
+logscore=sum(-log(result$cpo$cpo)) 
+logscore
+```
+
+## Results
+
+Require packages:
+
+```{r}
+library(RColorBrewer)
+library(maptools)
+library(Hmisc)
+library(R2WinBUGS)
+library(spdep)
+library(sp)
+library(Rgraphviz)
+library(classInt)    
+library(lattice)
+```
+
+Load Cartography of continental Spain :
+
+```{r}
+xName<- readShapePoly("ZonificacionEspanaProv/esp_prov.shp",IDvar="ESP_PROV_I", proj4string=CRS("+proj=longlat +ellps=clrk66"))
+
+xSC <- xName[xName$ESP_PROV_I !=35 &xName$ESP_PROV_I !=38 &xName$ESP_PROV_I !=51 &
+               xName$ESP_PROV_I !=52 & xName$ESP_PROV_I !=7,]
+```
+
+### Figure 4: Posterior medians of the rates for age-groups 30-44 and 45-59
+
+Calculation of the posterior medians and the 95% confident interval of the rates
+
+```{r}
+tasae<-result$summary.fitted.values[,c(3:5)]
+colnames(tasae)=c("ilimt","tasae","isupt")
+```
+
+We create a new data frame called AreaAgeGender, with the information of the gender, age-group and province, the population of each level and the estimated posterior medians and confident intervals. We want to plot the estimated posterior median of the rates per 100,000 population.
+
+```{r}
+AreaAgeGender<-data.frame(cbind(Data[,c(1:4,6)],tasae))
+
+AreaAgeGender$tasae=AreaAgeGender$tasae*10^5
+tail(AreaAgeGender)
+```
+
+We select the rates of 30-44 and 45-59 age-groups and we added to the cartography.
+
+```{r}
+D<-length(unique(AreaAgeGender$Cancer))
+disease <- c("LUNG","LOCP")
+
+G<-length(unique(AreaAgeGender$Gender))
+gender <- c("M","F")
+J<-length(unique(AreaAgeGender$Age_group))
+
+comarc=c(unique(Data$Region_n))
+
+for (i in 1:D) {
+  for (k in 1:G) {
+    for (l in 1:2) {
+      eval(parse(text=paste0("pr",disease[i],l,gender[k],"<-AreaAgeGender[AreaAgeGender$Cancer==",i," & AreaAgeGender$Gender==",k," & AreaAgeGender$Age_group==",l,",]$tasae")))
+      
+      eval(parse(text=paste0("region",disease[i],l,gender[k],"<-data.frame(comarc,pr",disease[i],l,gender[k],")")))
+      eval(parse(text=paste0("colnames(region",disease[i],l,gender[k],") <- c('region','crude_rate')")))
+      eval(parse(text=paste0("xSC$rate",disease[i],l,gender[k],"<-region",disease[i],l,gender[k],"[,2]")))
+    }
+  }
+}
+```
+
+Lung cancer mortality rates for 30-44 age-group by regions and gender:
+
+```{r}
+agelabels=c( "30-44", "45-59", "60-74", "75-89", "90+")
+
+colorkeypval=list(labels=paste(seq(1.2,4.2,by=0.3)),
+                  at=seq(1.2,4.2,by=0.3)) 
+
+spplot(xSC,zcol=c("rateLUNG1M","rateLUNG1F"),
+       names.attr=c("male","female"),at=seq(1.2,4.2,by=0.3),
+       as.table=T,col.regions=c("#ffffff","#FFFFCC","#FFEDA0","#FED976","#FEB24C","#FD8D3C","#FC4E2A","#E31A1C","#BD0026","#800026"),
+       colorkey=colorkeypval)
+```
+
+Lung cancer mortality rates for 45-59 age-group by regions and gender:
+
+```{r}
+colorkeypval=list(labels=paste(c(seq(12,28, by=4),seq(35.5,80.5,by=7.5))),
+                  at=c(seq(12,28, by=4),seq(35.5,80.5,by=7.5))) 
+
+spplot(xSC,zcol=c("rateLUNG2M","rateLUNG2F"),
+       names.attr=c("male","female"),at=c(seq(12,28, by=4),seq(35.5,80.5,by=7.5)),
+       as.table=T,col.regions=c("#ffffff","#FFFFCC","#FFEDA0","#FED976","#FEB24C","#FD8D3C","#FC4E2A","#E31A1C","#BD0026","#800026","black"),
+       colorkey=colorkeypval)
+```
+
+LOCP cancer mortality rates for 30-44 age-group by regions and gender:
+
+```{r}
+colorkeypval=list(labels=paste(seq(0.1,0.5,by=0.05)),
+                  at=seq(0.1,0.5,by=0.05)) 
+
+spplot(xSC,zcol=c("rateLOCP1M","rateLOCP1F"),
+       names.attr=c("male","female"),at=seq(0.1,0.5,by=0.05),
+       as.table=T,col.regions=c("#ffffff","#FFFFCC","#FFEDA0","#FED976","#FEB24C","#FD8D3C","#FC4E2A","#E31A1C","#BD0026","#800026"),
+       colorkey=colorkeypval)
+
+```
+
+LOCP cancer mortality rates for 45-59 age-group by regions and gender:
+
+```{r}
+colorkeypval=list(labels=paste(seq(1.5,9,by=0.75)),
+                  at=seq(1.5,9,by=0.75)) 
+
+spplot(xSC,zcol=c("rateLOCP2M","rateLOCP2F"),
+       names.attr=c("male","female"),at=seq(1.5,9,by=0.75),
+       as.table=T,col.regions=c("#ffffff","#FFFFCC","#FFEDA0","#FED976","#FEB24C","#FD8D3C","#FC4E2A","#E31A1C","#BD0026","#800026"),
+       colorkey=colorkeypval)
+```
+
+### Figure 5: Posterior medians of the rates for 60-74, 75-89 and 90+ age-groups
+
+We select the rates of 60-74, 75-89 and 90+ age-groups and we added to the cartography
+
+```{r}
+for (i in 1:D) {
+  for (k in 1:G) {
+    for (l in 3:J) {
+      eval(parse(text=paste0("pr",disease[i],l,gender[k],"<-AreaAgeGender[AreaAgeGender$Cancer==",i," & AreaAgeGender$Gender==",k," & AreaAgeGender$Age_group==",l,",]$tasae")))
+      
+      eval(parse(text=paste0("region",disease[i],l,gender[k],"<-data.frame(comarc,pr",disease[i],l,gender[k],")")))
+      eval(parse(text=paste0("colnames(region",disease[i],l,gender[k],") <- c('region','crude_rate')")))
+      eval(parse(text=paste0("xSC$rate",disease[i],l,gender[k],"<-region",disease[i],l,gender[k],"[,2]")))
+    }
+  }
+}
+```
+
+Lung cancer mortality rates for males by regions and age-groups
+
+```{r}
+colorkeypval=list(labels=paste(seq(165,520,by=35)),
+                  at=seq(165,520,by=35))
+spplot(xSC,zcol=c("rateLUNG3M","rateLUNG4M","rateLUNG5M"),
+       names.attr=c("60-74","75-89","90+"),at=seq(165,520,by=35),
+       as.table=T,col.regions=c("#F7FBFF","#DEEBF7","#C6DBEF","#9ECAE1","#6BAED6","#4292C6","#2171B5","#08519C","#08306B","black"),
+       colorkey=colorkeypval)
+```
+
+Lung cancer mortality rates for females by regions and age-groups
+
+```{r}
+colorkeypval=list(labels=paste(seq(20,105,by=8.5)),
+                  at=seq(20,105,by=8.5)) 
+
+spplot(xSC,zcol=c("rateLUNG3F","rateLUNG4F","rateLUNG5F"),
+       names.attr=c("60-74","75-89","90+"),at=seq(20,105,by=8.5),
+       as.table=T,col.regions=c("#F7FBFF","#DEEBF7","#C6DBEF","#9ECAE1","#6BAED6","#4292C6","#2171B5","#08519C","#08306B","black"),
+       colorkey=colorkeypval)
+```
+
+LOCP cancer mortality rates for males by regions and age-groups
+
+```{r}
+colorkeypval=list(labels=paste(seq(15,60,by=5)),
+                  at=seq(15,60,by=5)) 
+
+spplot(xSC,zcol=c("rateLOCP3M","rateLOCP4M","rateLOCP5M"),
+       names.attr=c("60-74","75-89","90+"),at=seq(15,60,by=5),
+       as.table=T,col.regions=c("#F7FBFF","#DEEBF7","#C6DBEF","#9ECAE1","#6BAED6","#4292C6","#2171B5","#08519C","#08306B","black"),
+       colorkey=colorkeypval)
+```
+
+LOCP cancer mortality rates for females by regions and age-groups
+
+```{r}
+colorkeypval=list(labels=paste(seq(3,18,by=1.5)),
+                  at=seq(3,18,by=1.5)) 
+
+spplot(xSC,zcol=c("rateLOCP3F","rateLOCP4F","rateLOCP5F"),
+       names.attr=c("60-74","75-89","90+"),at=seq(3,18,by=1.5),
+       as.table=T,col.regions=c("#F7FBFF","#DEEBF7","#C6DBEF","#9ECAE1","#6BAED6","#4292C6","#2171B5","#08519C","#08306B","black"),
+       colorkey=colorkeypval)
+```
+
+### Table 1: Ranking
+
+We want to see the estimated posterior median and the 95% credible interval of the rates per 100,000 population for the 10 provinces with highest mortality rates.
+
+```{r}
+disease <- c("LUNG","LOCP")
+gender <- c("Male","Female")
+
+AreaAgeGender$isupt<-AreaAgeGender$isupt*10^5
+AreaAgeGender$ilimt<-AreaAgeGender$ilimt*10^5
+
+for (i in 1:D) {
+  for (k in 1:G) {
+    for (l in 1:J) {
+      eval(parse(text=paste0(disease[i],"_",gender[k],"_",l,"<- AreaAgeGender[which(AreaAgeGender$Cancer==i & AreaAgeGender$Gender==k & AreaAgeGender$Age_group==l),]")))
+      
+      eval(parse(text=paste0( disease[i],"_",gender[k],"_",l,"<-",disease[i],"_",gender[k],"_",l,"[order(",disease[i],"_",gender[k],"_",l,"$tasae, decreasing=TRUE),]")))
+    }
+    
+  }
+}
+```
+
+Top 10 provinces for 60-74, 75-89 and 90+ age-groups by gender
+
+```{r}
+for (i in 1:D) {
+  for (k in 1:G) {
+    for (l in 3:J) {
+      eval(parse(text=paste0("table<-",disease[i],"_",gender[k],"_",l,"[c(1:10),c(3,6:8)]")))
+      latex_table<-xtable::xtable(table, caption=(text=paste0("Top 10 provinces for ",gender[k]," cancer type",disease[i]," and age-group",l)), digits=3)
+      xtable::print.xtable(latex_table, include.rownames = FALSE, comment=FALSE, caption.placement = getOption("xtable.caption.placement", "top"))
+    }
+  }
+}
+
+```
+
+### Figure 6: Posterior gender-specific shared spatial pattern
+
+The results of the model gives the spatial pattern for each disease and gender, that is to say, $\delta\kappa_{ig}$ for lung cancer and $\frac{1}{\delta}\kappa_{ig}$ for LOCP cancer. So we get the posterior median of the parameter $\delta$, to obtain the posterior median and credible interval of $\kappa_{ig}$.
+
+```{r}
+delta <-result$summary.hyperpar$`0.5quant`[2]
+
+reg_index=188
+csi <- result$marginals.random$i[1:reg_index] 
+
+zeta <- lapply(csi,function(x) inla.tmarginal(exp,x))
+
+spatialeffect=NULL
+for(l in 1:max(unique(reg_index))){
+  spatialeffect=rbind(spatialeffect,c(inla.qmarginal(0.5, zeta[[l]]),inla.hpdmarginal(0.95,zeta[[l]])))
+}#median, low-limit, upper-limit.
+
+```
+
+```{r}
+xSC$LUNGM <- spatialeffect[1:47]/delta
+xSC$LUNGF <- spatialeffect[95:141]/delta
+xSC$LOCPM <- spatialeffect[48:94]*delta
+xSC$LOCPF <- spatialeffect[142:188]*delta
+```
+
+We calculate the median for each gender by provinces. We calculate the median because we have the posterior distribution of $\delta\kappa_{ig}$ and $\frac{1}{\delta}\kappa_{ig}$, and when we undo the effect of $\delta$, we can do a little mistake because we use only the median of the distribution.
+
+```{r}
+xSC$MALES <- (xSC$LUNGM+xSC$LOCPM)/2
+
+xSC$FEMALES <- (xSC$LUNGF+xSC$LOCPF)/2
+```
+
+We plot the posterior gender-specific shared spatial pattern
+
+```{r}
+colorkeypval=list(labels=paste(seq(0.3,2.5,by=0.2)),
+                  at=seq(0.3,2.5,by=0.2)) 
+
+spplot(xSC,zcol=c("MALES","FEMALES"),
+       names.attr=c("Males","Females"),at=seq(0.3,2.5,by=0.2),
+       as.table=T,col.regions=c("#ffffff",'#ffffe5','#fff7bc','#fee391','#fec44f','#fe9929','#ec7014','#cc4c02','#993404','#662506',"black"),
+       colorkey=colorkeypval)
+
+```
+
+### Figure 7: Posterior median of the spatially unstructures effect
+
+The results of the model gives the posterior distribution of the spatially unstructured random effect of LOCP cancer. We get the posterior median and credible interval of the effect $u_i$ and we plot the posterior median of the spatially unstructured random effect pattern for LOCP cancer mortality.
+
+```{r}
+csi <-result$marginals.random$LOCP_het
+zeta <- lapply(csi,function(x) inla.tmarginal(exp,x))
+
+spatialunstructures=NULL
+for(l in 1:47){
+  spatialunstructures=rbind(spatialunstructures,c(inla.qmarginal(0.5, zeta[[l]]),inla.hpdmarginal(0.95,zeta[[l]])))
+}#median, low-limit, upper-limit.
+
+xSC$LOCPuns <- spatialunstructures[1:47,1]
+
+colorkeypval=list(labels=paste(seq(0.75,1.65,by=0.1)),
+                  at=seq(0.75,1.65,by=0.1)) 
+
+spplot(xSC,zcol=c("LOCPuns"),
+       names.attr=c("LOCP"),at=seq(0.75,1.65,by=0.1),
+       as.table=F,col.regions=c("#ffffff","#FFFFCC","#FFEDA0","#FED976","#FEB24C","#FD8D3C","#FC4E2A","#E31A1C","#BD0026","#800026"),
+       colorkey=colorkeypval)
+```
