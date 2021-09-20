@@ -62,9 +62,9 @@ pcprec <- list(theta=list(prior='pc.prec', param=c(1,0.01)))
 ## Formula for the final model and INLA execution
 
 ```{r}
-formula = Cases~ -1+i_P + i_LOCP + f(i, model="besag2", graph=g,hyper=pcprec, replicate=Gender)   +
-  f(LOCP_het, model="iid",hyper=pcprec,constr =T) +
-  f(Age_group, model="iid",hyper=pcprec,constr =T,replicate=Gender)
+formula = Cases~ -1 + i_P + i_LOCP + f(i, model="besag2", graph=g, hyper=pcprec, replicate=Gender, scale.model = T)   +
+  f(LOCP_het, model="iid", hyper=pcprec) +
+  f(Age_group, model="iid", hyper=pcprec, replicate=Gender)
 
 ```
 
