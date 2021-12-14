@@ -15,4 +15,7 @@ Due to confidentiality issue the original data used in the paper has been modifi
 # R code <a name="Rcode"/>
 R code to replicate the spatial multivariate model described in the paper and the results has been included [here](https://github.com/spatialstatisticsupna/Estimating_LOCP_cancer_mortality_rates/tree/main/R).
 
+# Acknowledgements <a name="Acknowledgements"/>
+This work has been supported by Projects MTM2017-82553-R (AEI/FEDER, UE) and PID2020-113125RB-I00/MCIN/AEI/10.13039/501100011033.
+
 # References <a name="Ref"/>
