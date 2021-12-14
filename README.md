@@ -6,7 +6,8 @@ This repository contains the R code to fit in INLA the age- and gender-specific 
 
 1.  [Note](#Note)
 2.  [R code](#Rcode)
-3.  [References](#Ref)
+3.  [Acknowledgements](#Acknowledgements)
+4.  [References](#Ref)
 
 # Note <a name="Note"/>
 
