@@ -1,4 +1,4 @@
-# Estimating LOCP cancer mortality rates in small domains in Spain by using its relationship with lung cancer
+# Estimating LOCP cancer mortality rates in small domains in Spain using its relationship with lung cancer
 
 This repository contains the R code to fit in INLA the age- and gender-specific shared component model described in "Estimating LOCP cancer mortality rates in small domains in Spain by using its relationship with lung cancer".
 
@@ -20,3 +20,4 @@ R code to replicate the spatial multivariate model described in the paper and th
 This work has been supported by Projects MTM2017-82553-R (AEI/FEDER, UE) and PID2020-113125RB-I00/MCIN/AEI/10.13039/501100011033.
 
 # References <a name="Ref"/>
+[Retegui, G., Etxeberria, J. & Ugarte, M.D. Estimating LOCP cancer mortality rates in small domains in Spain using its relationship with lung cancer. Sci Rep 11, 22273 (2021).https://doi.org/10.1038/s41598-021-01765-7](https://www.nature.com/articles/s41598-021-01765-7).
