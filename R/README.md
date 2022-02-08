@@ -1,6 +1,6 @@
 # R code
 
-This folder contains the necessary R code to fit the shared component model used in the paper and the results obtained and the modified data to reproduce the results.
+This folder contains the necessary R code to fit the shared component model used in the paper and the results obtained and the modified data to reproduce the results. The R software version used was R-3.5.2 and the R-INLA version 20.03.17.
 
 The DataExample.txt contains the modified data. It contains the following variables:
 
